@@ -7,11 +7,9 @@ function mkAnalyser(ctx){
 
 function mkAudioEnv(){
     var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    console.log(audioCtx.sampleRate);
     var sp = audioCtx.createScriptProcessor(0, 0, 2);
     globals.actx = audioCtx;
     var t = 0;
-    console.log(sp);
     globals.x = sp;
     globals.sr = audioCtx.sampleRate;
     return sp;
@@ -36,11 +34,11 @@ function mkInputSys(){
         var i = kcodes.indexOf(e.which);
         if (~i && !active[i])
         {
-            var n = mpiano[12+i];
+            var n = mpiano[39+i];
             var s = sinconst(n, 0.5);
-            var s2 = sinconst(mpiano[40+i], 0.5);
+            var s2 = squareconst(mpiano[40+i], 0.5);
             var m = mul([s, s2], 2);
-            var z = whitenoise(0.5, 1);
+            var z = whitenoise(0.0, 1);
             var p = mul([sum([m, s]), z]);
             addc(globals.ssum, p);
             active[i] = p;
@@ -163,6 +161,28 @@ function sinconst(freq, mul, add){
         o: o,
         n: []
     });
+}
+
+function sign(a){ return a<0 ? -1 : 1; }
+
+function squareconst(freq, mul, add){
+    mul = mul||1;
+    var len = 1/freq*globals.sr;
+    var a = new Float32Array(len|0);
+    for (var i=0; i<a.length; i++)
+        a[i] = sign(Math.sin(i/a.length*2*Math.PI))*mul;
+    var o = new Float32Array(globals.x.bufferSize);
+    var p = 0;
+    return reg({
+        r: function(){
+            for (var i=0; i<o.length; i++)
+                o[i] = a[(p+i)%a.length];
+            p = (p+o.length)%a.length;
+        },
+        o: o,
+        n: []
+    });
+
 }
 
 function sum(n){
