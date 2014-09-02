@@ -38,9 +38,10 @@ function mkInputSys(){
         {
             var n = mpiano[39+i];
             var s = sinconst(n, 0.5);
-            var s2 = sinconst(n*2, 0.5);
+            var s2 = sinconst(mpiano[40+i], 0.5);
             var m = mul([s, s2], 2);
-            var p = sum([m, s]);
+            var z = whitenoise(0.05, 1);
+            var p = mul([sum([m, s]), z]);
             addc(globals.ssum, p);
             active[i] = p;
         }
@@ -122,7 +123,7 @@ document.getElementById('stop').onclick = function(){
         globals.x.disconnect();
         globals.x = null;
     }
-}
+};
 
 function reg(n){
     globals.ggraph.push(n);
@@ -200,6 +201,17 @@ function mul(n, mulconst){
         },
         n: n,
         o: o,
+    });
+}
+
+function whitenoise(mulconst, addconst){
+    mulconst = mulconst||1;
+    var o = new Float32Array(globals.x.bufferSize);
+    for (var i=0; i<o.length; i++)
+        o[i] = (Math.random()*2-1)*mulconst+addconst;
+    return reg({
+        r: function(){},
+        o: o
     });
 }
 
