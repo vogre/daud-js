@@ -38,31 +38,45 @@ function mkInputSys(){
         {
             var n = mpiano[39+i];
             var s = sinconst(n, 0.1);
-            globals.ggraph.push(s);
-            globals.ssum.n.push(s);
-            globals.topo = topos(globals.ggraph);
+            addc(globals.ssum, s);
             active[i] = s;
         }
-    }
+    };
     document.body.onkeyup = function(e){
         var i = kcodes.indexOf(e.which);
         if (~i && active[i])
         {
             var t = active[i];
-            rm(globals.ggraph, t);
-            rm(globals.ssum.n, t);
-            globals.topo = topos(globals.ggraph);
+            rmg(globals.ggraph, t);
             active[i] = null;
         }
-    }
+    };
 }
 
-function rm(arr, it)
-{
+function addc(par, c){
+    par.n.push(c);
+    c.par = par;
+}
+
+function rm(arr, it){
     var i = arr.indexOf(it);
     if (i==-1)
         return;
     arr.splice(i, 1);
+}
+
+function rmg(arr, it){
+    if (it.par)
+        rm(it.par.n, it);
+    rmgi(arr, it);
+}
+
+function rmgi(arr, it){
+    rm(arr, it);
+    if (!it.n)
+        return;
+    for (var i=0; i<it.n.length; i++)
+        rmgi(arr, it.n[i]);
 }
 
 mkInputSys();
@@ -87,14 +101,14 @@ function v(n){
 
 function topos(g){
     L = [];
-    var  i = 0;
+    var i = 0;
     while (i<g.length)
     {
         if (!g[i].p)
             v(g[i]);
         i++;
     }
-    for (var i=0; i<g.length; i++)
+    for (i=0; i<g.length; i++)
         g[i].p = null;
     return L;
 }
@@ -107,10 +121,16 @@ document.getElementById('stop').onclick = function(){
     }
 }
 
+function reg(n){
+    globals.ggraph.push(n);
+    globals.vr++;
+    return n;
+}
+
 function chnode(n){
     var a1 = new Float32Array(globals.x.bufferSize);
     var a2 = new Float32Array(globals.x.bufferSize);
-    return {
+    return reg({
         r: function(){
             for (var i=0; i<a1.length; i++)
             {
@@ -119,7 +139,7 @@ function chnode(n){
             }
         },
         n: n,
-    };
+    });
 }
 
 function sinconst(freq, mul, add){
@@ -130,7 +150,7 @@ function sinconst(freq, mul, add){
         a[i] = Math.sin(i/a.length*2*Math.PI)*mul;
     var o = new Float32Array(globals.x.bufferSize);
     var p = 0;
-    return {
+    return reg({
         r: function(){
             for (var i=0; i<o.length; i++)
                 o[i] = a[(p+i)%a.length];
@@ -138,12 +158,12 @@ function sinconst(freq, mul, add){
         },
         o: o,
         n: []
-    };
+    });
 }
 
 function sum(n){
     var o = new Float32Array(globals.x.bufferSize);
-    return {
+    return reg({
         r: function(){
             var i, j;
             for (j=0; j<o.length; j++)
@@ -157,10 +177,19 @@ function sum(n){
         },
         o: o,
         n: n,
-    };
+    });
 }
 
-function coolhead(){
+function mul(){
+
+}
+
+function upall(){
+    if (globals.v != globals.vr)
+    {
+        globals.topo = topos(globals.ggraph);
+        globals.v = globals.vr;
+    }
     var o = globals.topo;
     for (var i=0; i<o.length; i++)
         o[i].r();
@@ -168,17 +197,18 @@ function coolhead(){
 
 function main(){
     var sp = mkAudioEnv();
+    var g = [];
+    globals.ggraph = g;
+    globals.v = 0;
+    globals.vr = 0;
     var sc = sinconst(440, 0.2);
     var sc2 = sinconst(660, 0.2);
     var ssum = sum([]);
-    var g = [sc, sc2, ssum];
-    globals.topo = topos(g);
-    globals.ggraph = g;
     globals.ssum = ssum;
     sp.onaudioprocess = function(e){
         var data = e.outputBuffer.getChannelData(0);
         var data2 = e.outputBuffer.getChannelData(1);
-        coolhead();
+        upall();
         for (var i=0; i<data.length; i++)
         {
             data[i] = globals.ssum.o[i];
