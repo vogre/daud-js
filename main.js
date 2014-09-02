@@ -37,9 +37,12 @@ function mkInputSys(){
         if (~i && !active[i])
         {
             var n = mpiano[39+i];
-            var s = sinconst(n, 0.1);
-            addc(globals.ssum, s);
-            active[i] = s;
+            var s = sinconst(n, 0.5);
+            var s2 = sinconst(n*2, 0.5);
+            var m = mul([s, s2], 2);
+            var p = sum([m, s]);
+            addc(globals.ssum, p);
+            active[i] = p;
         }
     };
     document.body.onkeyup = function(e){
@@ -180,8 +183,24 @@ function sum(n){
     });
 }
 
-function mul(){
-
+function mul(n, mulconst){
+    mulconst = mulconst||1;
+    var o = new Float32Array(globals.x.bufferSize);
+    return reg({
+        r: function(){
+            var i, j;
+            for (j=0; j<o.length; j++)
+                o[j] = mulconst;
+            for (i=0; i<this.n.length; i++)
+            {
+                var t = this.n[i];
+                for (j=0; j<o.length; j++)
+                    o[j] *= t.o[j];
+            }
+        },
+        n: n,
+        o: o,
+    });
 }
 
 function upall(){
