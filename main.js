@@ -36,11 +36,11 @@ function mkInputSys(){
         var i = kcodes.indexOf(e.which);
         if (~i && !active[i])
         {
-            var n = mpiano[39+i];
+            var n = mpiano[12+i];
             var s = sinconst(n, 0.5);
             var s2 = sinconst(mpiano[40+i], 0.5);
             var m = mul([s, s2], 2);
-            var z = whitenoise(0.05, 1);
+            var z = whitenoise(0.5, 1);
             var p = mul([sum([m, s]), z]);
             addc(globals.ssum, p);
             active[i] = p;
