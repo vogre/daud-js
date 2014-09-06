@@ -36,10 +36,11 @@ function mkInputSys(){
         {
             var n = mpiano[39+i];
             var s = sinconst(n, 0.5);
-            var s2 = squareconst(mpiano[40+i], 0.5);
+            var s2 = squareconst(mpiano[44+i], 0.5);
             var m = mul([s, s2], 2);
-            var z = whitenoise(0.0, 1);
-            var p = mul([sum([m, s]), z]);
+            // var z = whitenoise(0.0, 1);
+            var p = mul([sum([m, s]), adsr([8000, 1], [1000, 0.8],
+                [2100, 0.8], [3100, 0])]);
             addc(globals.ssum, p);
             active[i] = p;
         }
@@ -68,6 +69,7 @@ function rm(arr, it){
 }
 
 function rmg(arr, it){
+    globals.vr++;
     if (it.par)
         rm(it.par.n, it);
     rmgi(arr, it);
@@ -79,6 +81,50 @@ function rmgi(arr, it){
         return;
     for (var i=0; i<it.n.length; i++)
         rmgi(arr, it.n[i]);
+}
+
+function ts2sample(ts){ return ts/globals.sr; }
+
+// [[0,0], [100, 1], [200, 0.5], [220, 0]]
+function lenv(levels){
+    var t = ts2samp(levels[levels.length-1][0])|0;
+    var a = new Float32Array(t);
+}
+
+function adsr(a, d, s, r, shift){
+    shift = shift||0;
+    var o = new Float32Array(globals.x.bufferSize);
+    var pos = 0;
+    var state = 0;
+    var state_start = 0.0;
+    var next_state = shift;
+    var state_pos = 0;
+    var m = 0.0;
+    var arr = [[0, shift], a, d, s, r, [0, 0]];
+    return reg({
+        r: function(){
+            for (var i=0; i<o.length; i++)
+            {
+                if (pos+i==next_state)
+                {
+                    state++;
+                    var tprev = arr[state-1];
+                    var tcur = arr[state];
+                    state_start = tprev[1];
+                    state_pos = pos+i;
+                    next_state = next_state+tcur[0];
+                    m = (tcur[1]-tprev[1])/tcur[0];
+                }
+                o[i] = state_start+m*(pos+i-state_pos);
+            }
+            pos+=i;
+        },
+        o: o
+    });
+}
+
+function pattern(){
+
 }
 
 mkInputSys();
@@ -244,6 +290,10 @@ function upall(){
     var o = globals.topo;
     for (var i=0; i<o.length; i++)
         o[i].r();
+}
+
+function periodic(){
+
 }
 
 function main(){
