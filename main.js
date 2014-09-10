@@ -83,7 +83,9 @@ function rmgi(arr, it){
         rmgi(arr, it.n[i]);
 }
 
-function ts2sample(ts){ return ts/globals.sr; }
+function ts2sample(ts){ return ts*globals.sr; }
+
+function sample2ts(sample){ return sample/globals.sr; }
 
 // [[0,0], [100, 1], [200, 0.5], [220, 0]]
 function lenv(levels){
@@ -228,7 +230,66 @@ function squareconst(freq, mul, add){
         o: o,
         n: []
     });
+}
 
+function timer(i, to){
+    var z = 0;
+    var tt = (Math.random()*100).toFixed();
+    to = ts2sample(to);
+    return reg({
+        r: function(){ 
+            if (!this.par)
+                return;
+            z += globals.x.bufferSize;
+            console.log(tt, z, to);
+            if (z > to)
+                rmg(globals.ggraph, this);
+        },
+        o: i.o
+    });
+}
+
+var bpm = 120;
+function b2s(b){ return b*4*60/bpm; }
+
+function repeat(interval, sfn){
+    var time = 0;
+    var z = b2s(interval);
+    return {
+        p: function(t){
+            console.log('CREAT');
+            var _t = {
+                t: time,
+                s: sfn()
+            };
+            time += z;
+            return _t;
+        },
+        l: null
+    };
+}
+
+function drum(){
+    var s = sinconst(440, 0.5);
+    return timer(s, 0.1);
+}
+
+var patlist = [repeat(1/16, drum)];
+
+function mkPatternSystem(){
+    return function(time){
+        var cur_cyc_end = time+sample2ts(globals.x.bufferSize);
+        for (var i=0; i<patlist.length; i++)
+        {
+            var p = patlist[i];
+            if (!p.l)
+                p.l = p.p();
+            if (p.l.t>cur_cyc_end)
+                continue;
+            addc(globals.ssum, p.l.s);
+            p.l = p.p();
+        }
+    };
 }
 
 function sum(n){
@@ -298,6 +359,7 @@ function periodic(){
 
 function main(){
     var sp = mkAudioEnv();
+    var patSys = mkPatternSystem();
     var g = [];
     globals.ggraph = g;
     globals.v = 0;
@@ -307,6 +369,7 @@ function main(){
     var ssum = sum([]);
     globals.ssum = ssum;
     sp.onaudioprocess = function(e){
+        patSys(e.playbackTime);
         var data = e.outputBuffer.getChannelData(0);
         var data2 = e.outputBuffer.getChannelData(1);
         upall();
