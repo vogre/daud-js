@@ -63,6 +63,7 @@ function addc(par, c){
 
 function rm(arr, it){
     var i = arr.indexOf(it);
+    console.log('XXX', i);
     if (i==-1)
         return;
     arr.splice(i, 1);
@@ -71,7 +72,10 @@ function rm(arr, it){
 function rmg(arr, it){
     globals.vr++;
     if (it.par)
+    {
+        console.log('zzzzz', it);
         rm(it.par.n, it);
+    }
     rmgi(arr, it);
 }
 
@@ -121,7 +125,8 @@ function adsr(a, d, s, r, shift){
             }
             pos+=i;
         },
-        o: o
+        o: o,
+        tagg: 'adsr'
     });
 }
 
@@ -150,6 +155,9 @@ function v(n){
 }
 
 function topos(g){
+    console.log(typeof g);
+    console.log('LLLLEAK', g.map(function(x){ return x.tagg; }).join(','));
+    console.log(g);
     L = [];
     var i = 0;
     while (i<g.length)
@@ -207,7 +215,8 @@ function sinconst(freq, mul, add){
             p = (p+o.length)%a.length;
         },
         o: o,
-        n: []
+        n: [],
+        tagg: 'sinconst'
     });
 }
 
@@ -241,11 +250,12 @@ function timer(i, to){
             if (!this.par)
                 return;
             z += globals.x.bufferSize;
-            console.log(tt, z, to);
             if (z > to)
                 rmg(globals.ggraph, this);
         },
-        o: i.o
+        o: i.o,
+        n: [i],
+        tagg: 'timer',
     });
 }
 
@@ -257,10 +267,9 @@ function repeat(interval, sfn){
     var z = b2s(interval);
     return {
         p: function(t){
-            console.log('CREAT');
             var _t = {
                 t: time,
-                s: sfn()
+                s: sfn,
             };
             time += z;
             return _t;
@@ -270,15 +279,23 @@ function repeat(interval, sfn){
 }
 
 function drum(){
-    var s = sinconst(440, 0.5);
-    return timer(s, 0.1);
+    var s = sinconst(440+Math.random()*210|0, .5);
+    var x = sum([s, whitenoise(.01, 0)]);
+    var tt = mul([adsr([1000, 1], [2000, 0.8],
+        [2000, 0.8], [3000, 0]), x]);
+    return timer(tt, 0.2);
 }
 
-var patlist = [repeat(1/16, drum)];
+var patlist = [repeat(1/4, drum)];
 
 function mkPatternSystem(){
+    var last = 0;
     return function(time){
         var cur_cyc_end = time+sample2ts(globals.x.bufferSize);
+        var xx = ts2sample(time);
+        var diff = xx-last;
+        last = xx;
+        var offset = Math.abs(diff - globals.x.bufferSize);
         for (var i=0; i<patlist.length; i++)
         {
             var p = patlist[i];
@@ -286,7 +303,8 @@ function mkPatternSystem(){
                 p.l = p.p();
             if (p.l.t>cur_cyc_end)
                 continue;
-            addc(globals.ssum, p.l.s);
+            console.log(ts2sample(cur_cyc_end - p.l.t));
+            addc(globals.ssum, p.l.s());
             p.l = p.p();
         }
     };
@@ -308,6 +326,7 @@ function sum(n){
         },
         o: o,
         n: n,
+        tagg: 'sum'
     });
 }
 
@@ -328,6 +347,7 @@ function mul(n, mulconst){
         },
         n: n,
         o: o,
+        tagg: 'mul',
     });
 }
 
@@ -338,7 +358,8 @@ function whitenoise(mulconst, addconst){
         o[i] = (Math.random()*2-1)*mulconst+addconst;
     return reg({
         r: function(){},
-        o: o
+        o: o,
+        tag: 'whitenoise'
     });
 }
 
