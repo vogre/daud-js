@@ -1,5 +1,24 @@
 (function(){
 var globals = {};
+globals.mem = [];
+
+function sget(){
+    var a = globals.mem, l = a.length;
+    for (var i=0; i<l; i++)
+    {
+        if (!a[i].u)
+        {
+            a[i].u = true;
+            return a[i];
+        }
+    }
+console.log('alloc');
+    var t = {b: new Float32Array(globals.x.bufferSize), u: true}
+    a.push(t);
+    return t;
+}
+
+function sret(t){ t.u = false; }
 
 function mkAnalyser(ctx){
     return ctx.createAnalyser();
@@ -36,11 +55,12 @@ function mkInputSys(){
         {
             var n = mpiano[39+i];
             var s = sinconst(n, 0.5);
-            var s2 = squareconst(mpiano[44+i], 0.5);
-            var m = mul([s, s2], 2);
+            var s2 = sinconst(mpiano[44+i], 0.5);
+            var boo = sinvar(sinconst(100, 91, 100), 0.4);
+            var m = mul([s, s2], 1);
             // var z = whitenoise(0.0, 1);
-            var p = mul([sum([m, s]), adsr([8000, 1], [1000, 0.8],
-                [2100, 0.8], [3100, 0])]);
+            var p = mul([sum([m, boo]), adsr([8000, 1], [1000, 0.8],
+                [2100, 0.8], [30100, 0])]);
             addc(globals.ssum, p);
             active[i] = p;
         }
@@ -63,7 +83,6 @@ function addc(par, c){
 
 function rm(arr, it){
     var i = arr.indexOf(it);
-    console.log('XXX', i);
     if (i==-1)
         return;
     arr.splice(i, 1);
@@ -72,15 +91,14 @@ function rm(arr, it){
 function rmg(arr, it){
     globals.vr++;
     if (it.par)
-    {
-        console.log('zzzzz', it);
         rm(it.par.n, it);
-    }
     rmgi(arr, it);
 }
 
 function rmgi(arr, it){
     rm(arr, it);
+    if (it.ot)
+        sret(it.ot);
     if (!it.n)
         return;
     for (var i=0; i<it.n.length; i++)
@@ -99,14 +117,15 @@ function lenv(levels){
 
 function adsr(a, d, s, r, shift){
     shift = shift||0;
-    var o = new Float32Array(globals.x.bufferSize);
+    var ot = sget();
+    var o = ot.b;
     var pos = 0;
     var state = 0;
     var state_start = 0.0;
     var next_state = shift;
     var state_pos = 0;
     var m = 0.0;
-    var arr = [[0, shift], a, d, s, r, [0, 0]];
+    var arr = [[0, shift], a, d, s, r, [Infinity, 0]];
     return reg({
         r: function(){
             for (var i=0; i<o.length; i++)
@@ -126,7 +145,8 @@ function adsr(a, d, s, r, shift){
             pos+=i;
         },
         o: o,
-        tagg: 'adsr'
+        tagg: 'adsr',
+        ot: ot,
     });
 }
 
@@ -155,9 +175,6 @@ function v(n){
 }
 
 function topos(g){
-    console.log(typeof g);
-    console.log('LLLLEAK', g.map(function(x){ return x.tagg; }).join(','));
-    console.log(g);
     L = [];
     var i = 0;
     while (i<g.length)
@@ -202,24 +219,60 @@ function chnode(n){
 
 function sinconst(freq, mul, add){
     mul = mul||1;
-    var len = 1/freq*globals.sr;
-    var a = new Float32Array(len|0);
-    for (var i=0; i<a.length; i++)
-        a[i] = Math.sin(i/a.length*2*Math.PI)*mul;
-    var o = new Float32Array(globals.x.bufferSize);
+    add = add||0;
+    var ot = sget();
+    var o = ot.b;
     var p = 0;
+    var zp = 0;
     return reg({
         r: function(){
+            var step = freq/globals.sr;
             for (var i=0; i<o.length; i++)
-                o[i] = a[(p+i)%a.length];
-            p = (p+o.length)%a.length;
+            {
+                if (zp>1.0)
+                    zp = zp % 1;
+                var e = 2048*zp;
+                var p = e|0;
+                var a = globals.ccos[p];
+                var b = globals.ccos[p+1];
+                o[i] = (a + (p-e)*(b-a))*mul+add;
+                zp += step;
+            }
         },
         o: o,
+        ot: ot,
         n: [],
         tagg: 'sinconst'
     });
 }
 
+function sinvar(freqa, mul, add){
+    mul = mul||1;
+    var ot = sget();
+    var o = ot.b;
+    var p = 0;
+    var zp = 0;
+    return reg({
+        r: function(){
+            for (var i=0; i<o.length; i++)
+            {
+                var step = freqa.o[i]/globals.sr;
+                if (zp>1.0)
+                    zp = zp % 1;
+                var e = 2048*zp;
+                var p = e|0;
+                var a = globals.ccos[p];
+                var b = globals.ccos[p+1];
+                o[i] = (a + (p-e)*(b-a))*mul;
+                zp += step;
+            }
+        },
+        o: o,
+        ot: ot,
+        n: [freqa],
+        tagg: 'sinconst'
+    });
+}
 function sign(a){ return a<0 ? -1 : 1; }
 
 function squareconst(freq, mul, add){
@@ -279,7 +332,7 @@ function repeat(interval, sfn){
 }
 
 function drum(){
-    var s = sinconst(440+Math.random()*210|0, .5);
+    var s = sinconst(110+Math.random()*210|0, .2);
     var x = sum([s, whitenoise(.01, 0)]);
     var tt = mul([adsr([1000, 1], [2000, 0.8],
         [2000, 0.8], [3000, 0]), x]);
@@ -303,7 +356,6 @@ function mkPatternSystem(){
                 p.l = p.p();
             if (p.l.t>cur_cyc_end)
                 continue;
-            console.log(ts2sample(cur_cyc_end - p.l.t));
             addc(globals.ssum, p.l.s());
             p.l = p.p();
         }
@@ -311,7 +363,8 @@ function mkPatternSystem(){
 }
 
 function sum(n){
-    var o = new Float32Array(globals.x.bufferSize);
+    var ot = sget();
+    var o = ot.b;
     return reg({
         r: function(){
             var i, j;
@@ -325,6 +378,7 @@ function sum(n){
             }
         },
         o: o,
+        ot: ot,
         n: n,
         tagg: 'sum'
     });
@@ -332,7 +386,8 @@ function sum(n){
 
 function mul(n, mulconst){
     mulconst = mulconst||1;
-    var o = new Float32Array(globals.x.bufferSize);
+    var ot = sget();
+    var o = ot.b;
     return reg({
         r: function(){
             var i, j;
@@ -347,18 +402,21 @@ function mul(n, mulconst){
         },
         n: n,
         o: o,
+        ot: ot,
         tagg: 'mul',
     });
 }
 
 function whitenoise(mulconst, addconst){
     mulconst = mulconst||1;
-    var o = new Float32Array(globals.x.bufferSize);
+    var ot = sget();
+    var o = ot.b;
     for (var i=0; i<o.length; i++)
         o[i] = (Math.random()*2-1)*mulconst+addconst;
     return reg({
         r: function(){},
         o: o,
+        ot: ot,
         tag: 'whitenoise'
     });
 }
@@ -378,15 +436,17 @@ function periodic(){
 
 }
 
+function id(a){ return a; }
+
 function main(){
+    mkCos();
     var sp = mkAudioEnv();
     var patSys = mkPatternSystem();
     var g = [];
     globals.ggraph = g;
     globals.v = 0;
     globals.vr = 0;
-    var sc = sinconst(440, 0.2);
-    var sc2 = sinconst(660, 0.2);
+    var test = sinconst(440, 0.1);
     var ssum = sum([]);
     globals.ssum = ssum;
     sp.onaudioprocess = function(e){
@@ -401,6 +461,12 @@ function main(){
         }
     };
     sp.connect(globals.actx.destination);
+}
+
+function mkCos(){
+    globals.ccos = new Float32Array(2049);
+    for (var i=0; i<globals.ccos.length; i++)
+        globals.ccos[i] = Math.cos(i/2048*2*Math.PI);
 }
 
 main();
