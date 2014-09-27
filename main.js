@@ -25,7 +25,7 @@ function mkAnalyser(ctx){
 
 function mkAudioEnv(){
     var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    var sp = audioCtx.createScriptProcessor(0, 0, 2);
+    var sp = audioCtx.createScriptProcessor(2048, 0, 2);
     globals.actx = audioCtx;
     var t = 0;
     globals.x = sp;
@@ -198,24 +198,23 @@ document.getElementById('stop').onclick = function(){
 document.getElementById('plot_test').onclick = function(){
     var test_arr = [], test_arr2 = [];
     var s = sinconst(440, 1);
-    var tmpr = new Array(s.o.length);
-    var tmpi = new Array(s.o.length);
+    var tmpr = new Float32Array(s.o.length);
+    var tmpi = new Float32Array(s.o.length);
     s.r();
     for (i=0; i<2048; i++)
     {
         test_arr.push(s.o[i]);
         tmpr[i] = s.o[i];
+        // tmpr[i] = Math.cos(i/(44100/440)*Math.PI*2);
         tmpi[i] = 0;
     }
     ui.plot(test_arr, 'canvas_test');
     transform(tmpr, tmpi);
-    console.log('ZZZZ', tmpr[0], tmpi[0]);
     var maxIndex = 0;
     var max = 0;
     for (var i=0; i<2048; i++)
     {
-        // tmpr[i] = tmpr[i]/2048;
-        // tmpi[i] = tmpi[i]/2048;
+        // why 10?
         test_arr2[i] = Math.log(Math.sqrt(tmpr[i]*tmpr[i]+tmpi[i]*tmpi[i]))/10;
         if (test_arr2[i]>max)
         {
