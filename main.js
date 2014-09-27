@@ -12,7 +12,6 @@ function sget(){
             return a[i];
         }
     }
-console.log('alloc');
     var t = {b: new Float32Array(globals.x.bufferSize), u: true}
     a.push(t);
     return t;
@@ -196,6 +195,39 @@ document.getElementById('stop').onclick = function(){
     }
 };
 
+document.getElementById('plot_test').onclick = function(){
+    var test_arr = [], test_arr2 = [];
+    var s = sinconst(440, 1);
+    var tmpr = new Array(s.o.length);
+    var tmpi = new Array(s.o.length);
+    s.r();
+    for (i=0; i<2048; i++)
+    {
+        test_arr.push(s.o[i]);
+        tmpr[i] = s.o[i];
+        tmpi[i] = 0;
+    }
+    ui.plot(test_arr, 'canvas_test');
+    transform(tmpr, tmpi);
+    console.log('ZZZZ', tmpr[0], tmpi[0]);
+    var maxIndex = 0;
+    var max = 0;
+    for (var i=0; i<2048; i++)
+    {
+        // tmpr[i] = tmpr[i]/2048;
+        // tmpi[i] = tmpi[i]/2048;
+        test_arr2[i] = Math.log(Math.sqrt(tmpr[i]*tmpr[i]+tmpi[i]*tmpi[i]))/10;
+        if (test_arr2[i]>max)
+        {
+            max = test_arr2[i];
+            maxIndex = i;
+        }
+    }
+    console.log('MAX', max, maxIndex);
+    ui.barPlot(test_arr2.slice(0, 1024), 'bar_test');
+    rmg(globals.ggraph, s);
+};
+
 function reg(n){
     globals.ggraph.push(n);
     globals.vr++;
@@ -222,8 +254,7 @@ function sinconst(freq, mul, add){
     add = add||0;
     var ot = sget();
     var o = ot.b;
-    var p = 0;
-    var zp = 0;
+    var zp = 0.75;
     return reg({
         r: function(){
             var step = freq/globals.sr;
@@ -273,6 +304,15 @@ function sinvar(freqa, mul, add){
         tagg: 'sinconst'
     });
 }
+
+function sinlookup(){
+
+}
+
+function lookup(){
+
+}
+
 function sign(a){ return a<0 ? -1 : 1; }
 
 function squareconst(freq, mul, add){
@@ -339,7 +379,7 @@ function drum(){
     return timer(tt, 0.2);
 }
 
-var patlist = [repeat(1/4, drum)];
+var patlist = []||[repeat(1/4, drum)];
 
 function mkPatternSystem(){
     var last = 0;
@@ -441,6 +481,7 @@ function id(a){ return a; }
 function main(){
     mkCos();
     var sp = mkAudioEnv();
+    var analyser = mkAnalyser(globals.actx);
     var patSys = mkPatternSystem();
     var g = [];
     globals.ggraph = g;
@@ -460,13 +501,21 @@ function main(){
             data2[i] = globals.ssum.o[i];
         }
     };
+    sp.connect(analyser);
     sp.connect(globals.actx.destination);
+    ui.saya();
+    ui.create_graph('canvas_test');
+    ui.create_graph('bar_test');
 }
 
 function mkCos(){
     globals.ccos = new Float32Array(2049);
     for (var i=0; i<globals.ccos.length; i++)
         globals.ccos[i] = Math.cos(i/2048*2*Math.PI);
+}
+
+function fftf(){
+    
 }
 
 main();
