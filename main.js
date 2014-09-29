@@ -12,7 +12,7 @@ function sget(){
             return a[i];
         }
     }
-    var t = {b: new Float32Array(globals.x.bufferSize), u: true}
+    var t = {b: new Float32Array(globals.x.bufferSize), u: true};
     a.push(t);
     return t;
 }
@@ -197,7 +197,7 @@ document.getElementById('stop').onclick = function(){
 
 document.getElementById('plot_test').onclick = function(){
     var test_arr = [], test_arr2 = [];
-    var s = sinconst(440, 1);
+    var s = lop(1200, 2, whitenoise(1, 0));
     var tmpr = new Float32Array(s.o.length);
     var tmpi = new Float32Array(s.o.length);
     s.r();
@@ -310,6 +310,53 @@ function sinlookup(){
 
 function lookup(){
 
+}
+
+function getCoeffs(f0, Q){
+    var w0 = 2*Math.PI*f0/globals.sr;
+    var cos_w0 = Math.cos(w0);
+    var sin_w0 = Math.sin(w0);
+    var alpha = sin_w0/(2*Q);
+    return {w0: w0, cos_w0: cos_w0, sin_w0: sin_w0, Q: Q, alpha: alpha};
+}
+
+function biquadLoop(o, o2, b0, b1, b2, a0, a1, a2){
+    var yn_1 = 0;
+    var yn_2 = 0;
+    var xn_1 = 0;
+    var xn_2 = 0;
+    for (var i = 0; i < o.length; i++)
+    {
+        o2[i] = (b0/a0)*o[i] + (b1/a0)*xn_1 + (b2/a0)*xn_2 -
+            (a1/a0)*yn_1 - (a2/a0)*yn_2;
+        xn_2 = xn_1;
+        xn_1 = o[i];
+        yn_2 = yn_1;
+        yn_1 = o2[i];
+    }
+    console.log(o2);
+}
+
+function lop(f, Q, c){
+    var x = getCoeffs(f, Q);
+    var b0 = (1 - x.cos_w0)/2;
+    var b1 = 1 - x.cos_w0;
+    var b2 = (1 - x.cos_w0)/2;
+    var a0 = 1 + x.alpha;
+    var a1 = -2*x.cos_w0;
+    var a2 = 1 - x.alpha;
+    console.log(b0, b1, b2, a0, a1, a2);
+    var ot = sget();
+    var o = ot.b;
+    return reg({
+        r: function(){
+            biquadLoop(c.o, o, b0, b1, b2, a0, a1, a2);
+        },
+        o: o,
+        ot: ot,
+        n: [c],
+        tagg: 'lop'
+    });
 }
 
 function sign(a){ return a<0 ? -1 : 1; }
@@ -515,6 +562,22 @@ function mkCos(){
 
 function fftf(){
     
+}
+
+function BilinearFilter(){
+    this.xn_1 = this.xn_2 = 0;
+    this.yn_1 = this.yn_2 = 0;
+}
+
+BilinearFilter.prototype.doLoop = function(){
+    var src = this.src;
+    var dst = this.o;
+    var b0 = this.b0, b1 = this.b1, b2 = this.b2;
+    var a0 = this.a0, a1 = this.a1, a2 = this.a2;
+    for (var i = 0; i < src.length; i++)
+    {
+
+    }
 }
 
 main();
