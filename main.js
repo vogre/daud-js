@@ -12,6 +12,7 @@ function sget(){
             return a[i];
         }
     }
+    console.log('alloc');
     var t = {b: new Float32Array(globals.x.bufferSize), u: true};
     a.push(t);
     return t;
@@ -197,7 +198,7 @@ document.getElementById('stop').onclick = function(){
 
 document.getElementById('plot_test').onclick = function(){
     var test_arr = [], test_arr2 = [];
-    var s = lop(1200, 2, whitenoise(1, 0));
+    var s = new LOP(1200, 2, whitenoise(1, 0));
     var tmpr = new Float32Array(s.o.length);
     var tmpi = new Float32Array(s.o.length);
     s.r();
@@ -225,6 +226,13 @@ document.getElementById('plot_test').onclick = function(){
     console.log('MAX', max, maxIndex);
     ui.barPlot(test_arr2.slice(0, 1024), 'bar_test');
     rmg(globals.ggraph, s);
+};
+
+document.getElementById('pat_toggle').onclick = function(){
+    if (patlist.length)
+        patlist = [];
+    else
+        patlist = [repeat(1/8, drum)];
 };
 
 function reg(n){
@@ -334,7 +342,6 @@ function biquadLoop(o, o2, b0, b1, b2, a0, a1, a2){
         yn_2 = yn_1;
         yn_1 = o2[i];
     }
-    console.log(o2);
 }
 
 function lop(f, Q, c){
@@ -345,7 +352,6 @@ function lop(f, Q, c){
     var a0 = 1 + x.alpha;
     var a1 = -2*x.cos_w0;
     var a2 = 1 - x.alpha;
-    console.log(b0, b1, b2, a0, a1, a2);
     var ot = sget();
     var o = ot.b;
     return reg({
@@ -406,6 +412,8 @@ function repeat(interval, sfn){
     var z = b2s(interval);
     return {
         p: function(t){
+            if (t)
+                time = t+z;
             var _t = {
                 t: time,
                 s: sfn,
@@ -417,15 +425,17 @@ function repeat(interval, sfn){
     };
 }
 
-function drum(){
-    var s = sinconst(110+Math.random()*210|0, .2);
-    var x = sum([s, whitenoise(.01, 0)]);
+function drum(offset){
+    var s = sinconst(110+Math.random()*2|0, .2);
+    var x = sum([s, whitenoise(.1, 0)]);
+    var m = new LOP(880, 1, x);
     var tt = mul([adsr([1000, 1], [2000, 0.8],
-        [2000, 0.8], [3000, 0]), x]);
-    return timer(tt, 0.2);
+        [2000, 0.8], [3000, 0], ts2sample(offset)|0), m]);
+    console.log('offset', offset);
+    return timer(tt, 0.2+offset);
 }
 
-var patlist = []||[repeat(1/4, drum)];
+var patlist = [];
 
 function mkPatternSystem(){
     var last = 0;
@@ -439,10 +449,11 @@ function mkPatternSystem(){
         {
             var p = patlist[i];
             if (!p.l)
-                p.l = p.p();
+                p.l = p.p(time);
             if (p.l.t>cur_cyc_end)
                 continue;
-            addc(globals.ssum, p.l.s());
+            console.log(time);
+            addc(globals.ssum, p.l.s(cur_cyc_end - p.l.t));
             p.l = p.p();
         }
     };
@@ -571,13 +582,55 @@ function BilinearFilter(){
 
 BilinearFilter.prototype.doLoop = function(){
     var src = this.src;
-    var dst = this.o;
+    var o = src.o;
+    var o2 = this.o;
     var b0 = this.b0, b1 = this.b1, b2 = this.b2;
     var a0 = this.a0, a1 = this.a1, a2 = this.a2;
-    for (var i = 0; i < src.length; i++)
+    var xn_1 = this.xn_1, xn_2 = this.xn_2;
+    var yn_1 = this.yn_1, yn_2 = this.yn_2;
+    for (var i = 0; i < o.length; i++)
     {
-
+        o2[i] = (b0/a0)*o[i] + (b1/a0)*xn_1 + (b2/a0)*xn_2 -
+            (a1/a0)*yn_1 - (a2/a0)*yn_2;
+        xn_2 = xn_1;
+        xn_1 = o[i];
+        yn_2 = yn_1;
+        yn_1 = o2[i];
     }
+    this.xn_1 = xn_1;
+    this.xn_2 = xn_2;
+    this.yn_1 = yn_1;
+    this.yn_2 = yn_2;
+}
+
+function LOP(f, Q, c){
+    BilinearFilter.call(this);
+    this.f = f;
+    this.Q = Q;
+    this.src = c;
+    this.n = [c];
+    this.ot = sget();
+    this.o = this.ot.b;
+    this.calcCoeffs();
+    reg(this);
+}
+
+LOP.prototype = Object.create(BilinearFilter.prototype);
+
+LOP.prototype.calcCoeffs = function(){
+    var x = getCoeffs(this.f, this.Q);
+    this.b0 = (1 - x.cos_w0)/2;
+    this.b1 = 1 - x.cos_w0;
+    this.b2 = (1 - x.cos_w0)/2;
+    this.a0 = 1 + x.alpha;
+    this.a1 = -2*x.cos_w0;
+    this.a2 = 1 - x.alpha;
+}
+
+LOP.prototype.r = function(){
+    if (this.hask)
+        throw 'not implemented';
+    this.doLoop();
 }
 
 main();
