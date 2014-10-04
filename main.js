@@ -125,8 +125,10 @@ function adsr(a, d, s, r, shift){
     var next_state = shift;
     var state_pos = 0;
     var m = 0.0;
-    var arr = [[0, shift], a, d, s, r, [Infinity, 0]];
+    var arr = [[0, 0], a, d, s, r, [Infinity, 0]];
     return reg({
+        tlist: [a,d,s,r].map(function(t){ return t[0]; }),
+        tshift: shift,
         r: function(){
             for (var i=0; i<o.length; i++)
             {
@@ -223,9 +225,20 @@ document.getElementById('plot_test').onclick = function(){
             maxIndex = i;
         }
     }
-    console.log('MAX', max, maxIndex);
     ui.barPlot(test_arr2.slice(0, 1024), 'bar_test');
     rmg(globals.ggraph, s);
+
+    var bzt = adsr([2000, 1], [4000, 0.8],
+        [3000, 0.8], [8000, 0], 4000);
+    var test_arr_env = [];
+    for (i=0; i<20000; i++)
+    {
+        if ((i%2048)===0)
+            bzt.r();
+        test_arr_env.push(bzt.o[i%2048]);
+    }
+    rmg(globals.ggraph, bzt);
+    ui.barPlot(test_arr_env, 'env_test');
 };
 
 document.getElementById('pat_toggle').onclick = function(){
@@ -388,20 +401,25 @@ function squareconst(freq, mul, add){
 
 function timer(i, to){
     var z = 0;
-    var tt = (Math.random()*100).toFixed();
-    to = ts2sample(to);
+    to = ts2sample(to)|0;
     return reg({
-        r: function(){ 
+        r: function(){
             if (!this.par)
                 return;
             z += globals.x.bufferSize;
-            if (z > to)
+            if (z > to+globals.x.bufferSize*2)
                 rmg(globals.ggraph, this);
         },
         o: i.o,
         n: [i],
         tagg: 'timer',
     });
+}
+
+function envtimer(env, i){
+    var t = env.tlist;
+    var len = t.reduce(function(a, b){ return a+b; }, 0);
+    return timer(i, sample2ts(len+env.tshift));
 }
 
 var bpm = 120;
@@ -426,25 +444,20 @@ function repeat(interval, sfn){
 }
 
 function drum(offset){
-    var s = sinconst(110+Math.random()*2|0, .2);
+    var s = sinconst(112, .2);
     var x = sum([s, whitenoise(.1, 0)]);
     var m = new LOP(880, 1, x);
-    var tt = mul([adsr([1000, 1], [2000, 0.8],
-        [2000, 0.8], [3000, 0], ts2sample(offset)|0), m]);
-    console.log('offset', offset);
-    return timer(tt, 0.2+offset);
+    var env = adsr([2000, 1], [4000, 0.8],
+        [3000, 0.8], [8000, 0], ts2sample(offset)|0);
+    var tt = mul([env, m]);
+    return envtimer(env, tt);
 }
 
 var patlist = [];
 
 function mkPatternSystem(){
-    var last = 0;
     return function(time){
         var cur_cyc_end = time+sample2ts(globals.x.bufferSize);
-        var xx = ts2sample(time);
-        var diff = xx-last;
-        last = xx;
-        var offset = Math.abs(diff - globals.x.bufferSize);
         for (var i=0; i<patlist.length; i++)
         {
             var p = patlist[i];
@@ -452,8 +465,7 @@ function mkPatternSystem(){
                 p.l = p.p(time);
             if (p.l.t>cur_cyc_end)
                 continue;
-            console.log(time);
-            addc(globals.ssum, p.l.s(cur_cyc_end - p.l.t));
+            addc(globals.ssum, p.l.s(p.l.t-time));
             p.l = p.p();
         }
     };
@@ -563,6 +575,7 @@ function main(){
     ui.saya();
     ui.create_graph('canvas_test');
     ui.create_graph('bar_test');
+    ui.create_graph('env_test');
 }
 
 function mkCos(){
@@ -601,7 +614,7 @@ BilinearFilter.prototype.doLoop = function(){
     this.xn_2 = xn_2;
     this.yn_1 = yn_1;
     this.yn_2 = yn_2;
-}
+};
 
 function LOP(f, Q, c){
     BilinearFilter.call(this);
@@ -625,13 +638,13 @@ LOP.prototype.calcCoeffs = function(){
     this.a0 = 1 + x.alpha;
     this.a1 = -2*x.cos_w0;
     this.a2 = 1 - x.alpha;
-}
+};
 
 LOP.prototype.r = function(){
     if (this.hask)
         throw 'not implemented';
     this.doLoop();
-}
+};
 
 main();
 
