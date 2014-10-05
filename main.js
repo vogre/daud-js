@@ -1,5 +1,6 @@
 (function(){
 var globals = {};
+globals.defbuf = 2048;
 globals.mem = [];
 
 function sget(){
@@ -26,7 +27,7 @@ function mkAnalyser(ctx){
 
 function mkAudioEnv(){
     var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    var sp = audioCtx.createScriptProcessor(2048, 0, 2);
+    var sp = audioCtx.createScriptProcessor(globals.defbuf, 0, 2);
     globals.actx = audioCtx;
     var t = 0;
     globals.x = sp;
@@ -109,13 +110,51 @@ function ts2sample(ts){ return ts*globals.sr; }
 
 function sample2ts(sample){ return sample/globals.sr; }
 
-// [[0,0], [100, 1], [200, 0.5], [220, 0]]
-function lenv(levels){
-    var t = ts2samp(levels[levels.length-1][0])|0;
-    var a = new Float32Array(t);
+function adsr(a, d, s, r, shift){
+    shift = shift||0;
+    var ot = sget();
+    var o = ot.b;
+    var pos = 0;
+    var state = 0;
+    var state_start = 0.0;
+    var next_state = shift;
+    var state_pos = 0;
+    var m = 0.0;
+    var arr = [[0, 0], a, d, s, r, [Infinity, 0]];
+    return reg({
+        tlist: [a,d,s,r].map(function(t){ return t[0]; }),
+        len: function(){
+            if (this._len)
+                return this._len;
+            var t = this.tlist;
+            var l = t.reduce(function(a, b){ return a+b; }, 0);
+            return (this._len=l+this.tshift);
+        },
+        tshift: shift,
+        r: function(){
+            for (var i=0; i<o.length; i++)
+            {
+                if (pos+i==next_state)
+                {
+                    state++;
+                    var tprev = arr[state-1];
+                    var tcur = arr[state];
+                    state_start = tprev[1];
+                    state_pos = pos+i;
+                    next_state = next_state+tcur[0];
+                    m = (tcur[1]-tprev[1])/tcur[0];
+                }
+                o[i] = state_start+m*(pos+i-state_pos);
+            }
+            pos+=i;
+        },
+        o: o,
+        tagg: 'adsr',
+        ot: ot,
+    });
 }
 
-function adsr(a, d, s, r, shift){
+function adsrGen(arr, shift){
     shift = shift||0;
     var ot = sget();
     var o = ot.b;
@@ -147,13 +186,9 @@ function adsr(a, d, s, r, shift){
             pos+=i;
         },
         o: o,
-        tagg: 'adsr',
+        tagg: 'adsrGen',
         ot: ot,
     });
-}
-
-function pattern(){
-
 }
 
 mkInputSys();
@@ -198,44 +233,40 @@ document.getElementById('stop').onclick = function(){
     }
 };
 
-document.getElementById('plot_test').onclick = function(){
-    var test_arr = [], test_arr2 = [];
-    var s = new LOP(1200, 2, whitenoise(1, 0));
+function plotAt(s, name_a, name_b){
     var tmpr = new Float32Array(s.o.length);
     var tmpi = new Float32Array(s.o.length);
-    s.r();
-    for (i=0; i<2048; i++)
+    var mag_log = new Float32Array(s.o.length);
+    upall();
+    ui.plot(s.o, name_a);
+    for (i=0; i<globals.defbuf; i++)
     {
-        test_arr.push(s.o[i]);
         tmpr[i] = s.o[i];
-        // tmpr[i] = Math.cos(i/(44100/440)*Math.PI*2);
         tmpi[i] = 0;
     }
-    ui.plot(test_arr, 'canvas_test');
     transform(tmpr, tmpi);
-    var maxIndex = 0;
-    var max = 0;
-    for (var i=0; i<2048; i++)
+    for (var i=0; i<globals.defbuf/2; i++)
     {
         // why 10?
-        test_arr2[i] = Math.log(Math.sqrt(tmpr[i]*tmpr[i]+tmpi[i]*tmpi[i]))/10;
-        if (test_arr2[i]>max)
-        {
-            max = test_arr2[i];
-            maxIndex = i;
-        }
+        mag_log[i] = Math.log(Math.sqrt(tmpr[i]*tmpr[i]+tmpi[i]*tmpi[i]))/10;
     }
-    ui.barPlot(test_arr2.slice(0, 1024), 'bar_test');
+    ui.barPlot(mag_log.subarray(0, globals.defbuf/2), name_b);
+}
+
+document.getElementById('plot_test').onclick = function(){
+    var test_arr2 = [];
+    var s = new LOP(1000, 1, sinconst(440, 1));
+    plotAt(s, 'canvas_test', 'bar_test');
     rmg(globals.ggraph, s);
 
     var bzt = adsr([2000, 1], [4000, 0.8],
         [3000, 0.8], [8000, 0], 4000);
     var test_arr_env = [];
-    for (i=0; i<20000; i++)
+    for (i=0; i<bzt.len(); i++)
     {
-        if ((i%2048)===0)
+        if ((i%globals.defbuf)===0)
             bzt.r();
-        test_arr_env.push(bzt.o[i%2048]);
+        test_arr_env.push(bzt.o[i%globals.defbuf]);
     }
     rmg(globals.ggraph, bzt);
     ui.barPlot(test_arr_env, 'env_test');
@@ -584,16 +615,12 @@ function mkCos(){
         globals.ccos[i] = Math.cos(i/2048*2*Math.PI);
 }
 
-function fftf(){
-    
-}
-
-function BilinearFilter(){
+function BiquadFilter(){
     this.xn_1 = this.xn_2 = 0;
     this.yn_1 = this.yn_2 = 0;
 }
 
-BilinearFilter.prototype.doLoop = function(){
+BiquadFilter.prototype.doLoop = function(){
     var src = this.src;
     var o = src.o;
     var o2 = this.o;
@@ -617,7 +644,7 @@ BilinearFilter.prototype.doLoop = function(){
 };
 
 function LOP(f, Q, c){
-    BilinearFilter.call(this);
+    BiquadFilter.call(this);
     this.f = f;
     this.Q = Q;
     this.src = c;
@@ -628,7 +655,7 @@ function LOP(f, Q, c){
     reg(this);
 }
 
-LOP.prototype = Object.create(BilinearFilter.prototype);
+LOP.prototype = Object.create(BiquadFilter.prototype);
 
 LOP.prototype.calcCoeffs = function(){
     var x = getCoeffs(this.f, this.Q);
@@ -645,6 +672,38 @@ LOP.prototype.r = function(){
         throw 'not implemented';
     this.doLoop();
 };
+
+function HP(f, Q, c){
+    BiquadFilter.call(this);
+    this.f = f;
+    this.Q = Q;
+    this.src = c;
+    this.n = [c];
+    this.ot = sget();
+    this.o = this.ot.b;
+    this.calcCoeffs();
+    reg(this);
+}
+
+HP.prototype = Object.create(BiquadFilter.prototype);
+
+HP.prototype.calcCoeffs = function(){
+    var x = getCoeffs(this.f, this.Q);
+    this.b0 = (1 + x.cos_w0)/2;
+    this.b1 = -(1 + x.cos_w0);
+    this.b2 = (1 + x.cos_w0)/2;
+    this.a0 = 1 + x.alpha;
+    this.a1 = -2*x.cos_w0;
+    this.a2 = 1 - x.alpha;
+};
+
+HP.prototype.r = function(){
+    if (this.hask)
+        throw 'not implemented';
+    this.doLoop();
+};
+
+
 
 main();
 
