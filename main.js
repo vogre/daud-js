@@ -588,7 +588,7 @@ function main(){
     globals.v = 0;
     globals.vr = 0;
     var test = sinconst(440, 0.1);
-    var ssum = sum([]);
+    var ssum = sum([phasor(220, 0.1), phasor(222, 0.1)]);
     globals.ssum = ssum;
     sp.onaudioprocess = function(e){
         patSys(e.playbackTime);
@@ -703,7 +703,29 @@ HP.prototype.r = function(){
     this.doLoop();
 };
 
-
+function phasor(freq, mul, add){
+    mul = mul||1;
+    add = add||0;
+    var ot = sget();
+    var o = ot.b;
+    var zp = 0;
+    return reg({
+        r: function(){
+            var step = freq/globals.sr;
+            for (var i=0; i<o.length; i++)
+            {
+                if (zp>1.0)
+                    zp = zp % 1;
+                o[i] = zp*mul + add;
+                zp += step;
+            }
+        },
+        o: o,
+        ot: ot,
+        n: [],
+        tagg: 'sinconst'
+    });
+}
 
 main();
 
