@@ -4,7 +4,7 @@ global.daud = M;
 
 var globals = {};
 globals.defbuf = 2048;
-M._defbuf = global.defbuf;
+M._defbuf = globals.defbuf;
 globals.mem = [];
 
 function sget(){

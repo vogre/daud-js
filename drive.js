@@ -35,22 +35,22 @@ function m(){
         daud._setPatList(patlist);
     };
 
-document.getElementById('plot_test').onclick = function(){
-    var s = new daud.LOP(1000, 1, daud.sinconst(440, 1));
-    plotAt(s, 'canvas_test', 'bar_test');
-    daud._rmg(daud._ggraph, s);
-    var bzt = daud.adsr([2000, 1], [4000, 0.8],
-        [3000, 0.8], [8000, 0], 4000);
-    var test_arr_env = [];
-    for (var i=0; i<bzt.len(); i++)
-    {
-        if ((i%daud._defbuf)===0)
-            bzt.r();
-        test_arr_env.push(bzt.o[i%daud._defbuf]);
-    }
-    daud._rmg(daud._ggraph, bzt);
-    ui.barPlot(test_arr_env, 'env_test');
-};
+    document.getElementById('plot_test').onclick = function(){
+        var s = new daud.LOP(1000, 1, daud.sinconst(440, 1));
+        plotAt(s, 'canvas_test', 'bar_test');
+        daud._rmg(daud._ggraph, s);
+        var bzt = daud.adsr([2000, 1], [4000, 0.8],
+            [3000, 0.8], [8000, 0], 4000);
+        var test_arr_env = [];
+        for (var i=0; i<bzt.len(); i++)
+        {
+            if ((i%daud._defbuf)===0)
+                bzt.r();
+            test_arr_env.push(bzt.o[i%daud._defbuf]);
+        }
+        daud._rmg(daud._ggraph, bzt);
+        ui.barPlot(test_arr_env, 'env_test');
+    };
     ui.create_graph('canvas_test');
     ui.create_graph('bar_test');
     ui.create_graph('env_test');
