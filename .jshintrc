@@ -1,3 +1,9 @@
 {
-"-W056":true
+"-W056":true,
+"-W008":true,
+"undef": true,
+"unused": true,
+"typed": true,
+"browser": true,
+"devel": true
 }

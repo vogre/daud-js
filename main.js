@@ -1,6 +1,10 @@
-(function(){
+(function(global){
+var M = {};
+global.daud = M;
+
 var globals = {};
 globals.defbuf = 2048;
+M._defbuf = global.defbuf;
 globals.mem = [];
 
 function sget(){
@@ -21,15 +25,10 @@ function sget(){
 
 function sret(t){ t.u = false; }
 
-function mkAnalyser(ctx){
-    return ctx.createAnalyser();
-}
-
 function mkAudioEnv(){
     var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     var sp = audioCtx.createScriptProcessor(globals.defbuf, 0, 2);
     globals.actx = audioCtx;
-    var t = 0;
     globals.x = sp;
     globals.sr = audioCtx.sampleRate;
     return sp;
@@ -41,8 +40,9 @@ function mkPiano(){
         a[i] = Math.pow(2, (i+1-49)/12)*440;
     return a;
 }
+M.mkPiano = mkPiano;
 
-mpiano = mkPiano();
+var mpiano = mkPiano();
 
 var active = new Array(12);
 
@@ -95,6 +95,7 @@ function rmg(arr, it){
         rm(it.par.n, it);
     rmgi(arr, it);
 }
+M._rmg = rmg;
 
 function rmgi(arr, it){
     rm(arr, it);
@@ -107,8 +108,10 @@ function rmgi(arr, it){
 }
 
 function ts2sample(ts){ return ts*globals.sr; }
+M.ts2sample = ts2sample;
 
 function sample2ts(sample){ return sample/globals.sr; }
+M.sample2ts = sample2ts;
 
 function adsr(a, d, s, r, shift){
     shift = shift||0;
@@ -153,43 +156,7 @@ function adsr(a, d, s, r, shift){
         ot: ot,
     });
 }
-
-function adsrGen(arr, shift){
-    shift = shift||0;
-    var ot = sget();
-    var o = ot.b;
-    var pos = 0;
-    var state = 0;
-    var state_start = 0.0;
-    var next_state = shift;
-    var state_pos = 0;
-    var m = 0.0;
-    var arr = [[0, 0], a, d, s, r, [Infinity, 0]];
-    return reg({
-        tlist: [a,d,s,r].map(function(t){ return t[0]; }),
-        tshift: shift,
-        r: function(){
-            for (var i=0; i<o.length; i++)
-            {
-                if (pos+i==next_state)
-                {
-                    state++;
-                    var tprev = arr[state-1];
-                    var tcur = arr[state];
-                    state_start = tprev[1];
-                    state_pos = pos+i;
-                    next_state = next_state+tcur[0];
-                    m = (tcur[1]-tprev[1])/tcur[0];
-                }
-                o[i] = state_start+m*(pos+i-state_pos);
-            }
-            pos+=i;
-        },
-        o: o,
-        tagg: 'adsrGen',
-        ot: ot,
-    });
-}
+M.adsr = adsr;
 
 mkInputSys();
 
@@ -225,79 +192,19 @@ function topos(g){
     return L;
 }
 
-document.getElementById('stop').onclick = function(){
+function stopNow(){
     if (globals.x)
-    {
         globals.x.disconnect();
-        globals.x = null;
-    }
-};
-
-function plotAt(s, name_a, name_b){
-    var tmpr = new Float32Array(s.o.length);
-    var tmpi = new Float32Array(s.o.length);
-    var mag_log = new Float32Array(s.o.length);
-    upall();
-    ui.plot(s.o, name_a);
-    for (i=0; i<globals.defbuf; i++)
-    {
-        tmpr[i] = s.o[i];
-        tmpi[i] = 0;
-    }
-    transform(tmpr, tmpi);
-    for (var i=0; i<globals.defbuf/2; i++)
-    {
-        // why 10?
-        mag_log[i] = Math.log(Math.sqrt(tmpr[i]*tmpr[i]+tmpi[i]*tmpi[i]))/10;
-    }
-    ui.barPlot(mag_log.subarray(0, globals.defbuf/2), name_b);
 }
+M.stopNow = stopNow;
 
-document.getElementById('plot_test').onclick = function(){
-    var test_arr2 = [];
-    var s = new LOP(1000, 1, sinconst(440, 1));
-    plotAt(s, 'canvas_test', 'bar_test');
-    rmg(globals.ggraph, s);
-
-    var bzt = adsr([2000, 1], [4000, 0.8],
-        [3000, 0.8], [8000, 0], 4000);
-    var test_arr_env = [];
-    for (i=0; i<bzt.len(); i++)
-    {
-        if ((i%globals.defbuf)===0)
-            bzt.r();
-        test_arr_env.push(bzt.o[i%globals.defbuf]);
-    }
-    rmg(globals.ggraph, bzt);
-    ui.barPlot(test_arr_env, 'env_test');
-};
-
-document.getElementById('pat_toggle').onclick = function(){
-    if (patlist.length)
-        patlist = [];
-    else
-        patlist = [repeat(1/8, drum)];
-};
+function setPatList(value){ patlist = value; }
+M._setPatList = setPatList;
 
 function reg(n){
     globals.ggraph.push(n);
     globals.vr++;
     return n;
-}
-
-function chnode(n){
-    var a1 = new Float32Array(globals.x.bufferSize);
-    var a2 = new Float32Array(globals.x.bufferSize);
-    return reg({
-        r: function(){
-            for (var i=0; i<a1.length; i++)
-            {
-                a1[i] = this.n[0][i];
-                a2[i] = this.n[0][i];
-            }
-        },
-        n: n,
-    });
 }
 
 function sinconst(freq, mul, add){
@@ -327,12 +234,13 @@ function sinconst(freq, mul, add){
         tagg: 'sinconst'
     });
 }
+M.sinconst = sinconst;
 
 function sinvar(freqa, mul, add){
     mul = mul||1;
+    add = add||0;
     var ot = sget();
     var o = ot.b;
-    var p = 0;
     var zp = 0;
     return reg({
         r: function(){
@@ -345,7 +253,7 @@ function sinvar(freqa, mul, add){
                 var p = e|0;
                 var a = globals.ccos[p];
                 var b = globals.ccos[p+1];
-                o[i] = (a + (p-e)*(b-a))*mul;
+                o[i] = (a + (p-e)*(b-a))*mul+add;
                 zp += step;
             }
         },
@@ -355,14 +263,7 @@ function sinvar(freqa, mul, add){
         tagg: 'sinconst'
     });
 }
-
-function sinlookup(){
-
-}
-
-function lookup(){
-
-}
+M.sinvar = sinvar;
 
 function getCoeffs(f0, Q){
     var w0 = 2*Math.PI*f0/globals.sr;
@@ -372,63 +273,7 @@ function getCoeffs(f0, Q){
     return {w0: w0, cos_w0: cos_w0, sin_w0: sin_w0, Q: Q, alpha: alpha};
 }
 
-function biquadLoop(o, o2, b0, b1, b2, a0, a1, a2){
-    var yn_1 = 0;
-    var yn_2 = 0;
-    var xn_1 = 0;
-    var xn_2 = 0;
-    for (var i = 0; i < o.length; i++)
-    {
-        o2[i] = (b0/a0)*o[i] + (b1/a0)*xn_1 + (b2/a0)*xn_2 -
-            (a1/a0)*yn_1 - (a2/a0)*yn_2;
-        xn_2 = xn_1;
-        xn_1 = o[i];
-        yn_2 = yn_1;
-        yn_1 = o2[i];
-    }
-}
-
-function lop(f, Q, c){
-    var x = getCoeffs(f, Q);
-    var b0 = (1 - x.cos_w0)/2;
-    var b1 = 1 - x.cos_w0;
-    var b2 = (1 - x.cos_w0)/2;
-    var a0 = 1 + x.alpha;
-    var a1 = -2*x.cos_w0;
-    var a2 = 1 - x.alpha;
-    var ot = sget();
-    var o = ot.b;
-    return reg({
-        r: function(){
-            biquadLoop(c.o, o, b0, b1, b2, a0, a1, a2);
-        },
-        o: o,
-        ot: ot,
-        n: [c],
-        tagg: 'lop'
-    });
-}
-
-function sign(a){ return a<0 ? -1 : 1; }
-
-function squareconst(freq, mul, add){
-    mul = mul||1;
-    var len = 1/freq*globals.sr;
-    var a = new Float32Array(len|0);
-    for (var i=0; i<a.length; i++)
-        a[i] = sign(Math.sin(i/a.length*2*Math.PI))*mul;
-    var o = new Float32Array(globals.x.bufferSize);
-    var p = 0;
-    return reg({
-        r: function(){
-            for (var i=0; i<o.length; i++)
-                o[i] = a[(p+i)%a.length];
-            p = (p+o.length)%a.length;
-        },
-        o: o,
-        n: []
-    });
-}
+function sign(a){ return a<0 ? -1 : 1; }// jshint ignore:line
 
 function timer(i, to){
     var z = 0;
@@ -446,15 +291,18 @@ function timer(i, to){
         tagg: 'timer',
     });
 }
+M.timer = timer;
 
 function envtimer(env, i){
     var t = env.tlist;
     var len = t.reduce(function(a, b){ return a+b; }, 0);
     return timer(i, sample2ts(len+env.tshift));
 }
+M.envtimer = envtimer;
 
 var bpm = 120;
 function b2s(b){ return b*4*60/bpm; }
+M.b2s = b2s;
 
 function repeat(interval, sfn){
     var time = 0;
@@ -473,16 +321,18 @@ function repeat(interval, sfn){
         l: null
     };
 }
+M.repeat = repeat;
 
 function drum(offset){
     var s = sinconst(112, .2);
-    var x = sum([s, whitenoise(.1, 0)]);
+    var x = sum([s, whitenoise(.2, 0)]);
     var m = new LOP(880, 1, x);
     var env = adsr([2000, 1], [4000, 0.8],
         [3000, 0.8], [8000, 0], ts2sample(offset)|0);
     var tt = mul([env, m]);
     return envtimer(env, tt);
 }
+M.drum = drum;
 
 var patlist = [];
 
@@ -523,6 +373,7 @@ function sum(n){
         tagg: 'sum'
     });
 }
+M.sum = sum;
 
 function mul(n, mulconst){
     mulconst = mulconst||1;
@@ -546,6 +397,7 @@ function mul(n, mulconst){
         tagg: 'mul',
     });
 }
+M.mul = mul;
 
 function whitenoise(mulconst, addconst){
     mulconst = mulconst||1;
@@ -560,6 +412,7 @@ function whitenoise(mulconst, addconst){
         tag: 'whitenoise'
     });
 }
+M.whitenoise = whitenoise;
 
 function upall(){
     if (globals.v != globals.vr)
@@ -571,24 +424,19 @@ function upall(){
     for (var i=0; i<o.length; i++)
         o[i].r();
 }
-
-function periodic(){
-
-}
-
-function id(a){ return a; }
+M._upall = upall;
 
 function main(){
     mkCos();
     var sp = mkAudioEnv();
-    var analyser = mkAnalyser(globals.actx);
     var patSys = mkPatternSystem();
     var g = [];
     globals.ggraph = g;
+    M._ggraph = g;
     globals.v = 0;
     globals.vr = 0;
-    var test = sinconst(440, 0.1);
-    var ssum = sum([phasor(220, 0.1), phasor(222, 0.1)]);
+    var test = sinconst(440, 0.1); // jshint ignore:line
+    var ssum = sum([]);
     globals.ssum = ssum;
     sp.onaudioprocess = function(e){
         patSys(e.playbackTime);
@@ -601,12 +449,7 @@ function main(){
             data2[i] = globals.ssum.o[i];
         }
     };
-    sp.connect(analyser);
     sp.connect(globals.actx.destination);
-    ui.saya();
-    ui.create_graph('canvas_test');
-    ui.create_graph('bar_test');
-    ui.create_graph('env_test');
 }
 
 function mkCos(){
@@ -672,6 +515,7 @@ LOP.prototype.r = function(){
         throw 'not implemented';
     this.doLoop();
 };
+M.LOP = LOP;
 
 function HP(f, Q, c){
     BiquadFilter.call(this);
@@ -702,6 +546,7 @@ HP.prototype.r = function(){
         throw 'not implemented';
     this.doLoop();
 };
+M.HP = HP;
 
 function phasor(freq, mul, add){
     mul = mul||1;
@@ -726,7 +571,8 @@ function phasor(freq, mul, add){
         tagg: 'sinconst'
     });
 }
+M.phasor = phasor;
 
 main();
 
-})();
+})(window);

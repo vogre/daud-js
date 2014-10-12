@@ -7,7 +7,7 @@ function ini(){
     var ctx = c.getContext('2d');
     z = ctx;
 }
-    
+
 function b(arr_fn){
     ini();
     anim(function(){
@@ -19,7 +19,7 @@ function b(arr_fn){
         }
     });
 }
-    
+
 var anim = function(f){
     var stopper = {stop: false};
     function ai(){
@@ -98,9 +98,6 @@ function create_graph(id){
 }
 
 self.ui = {
-    saya: function(){
-        console.log('A');
-    },
     plot: do_plot,
     barPlot: do_plot_bar,
     create_graph: create_graph,
